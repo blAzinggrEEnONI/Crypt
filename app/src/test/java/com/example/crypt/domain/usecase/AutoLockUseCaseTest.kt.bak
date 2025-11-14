@@ -1,0 +1,290 @@
+package com.example.crypt.domain.usecase
+
+import androidx.lifecycle.LifecycleOwner
+import com.example.crypt.domain.model.AppLockState
+import kotlinx.coroutines.ExperimentalCoroutinesApi
+import kotlinx.coroutines.test.*
+import org.junit.After
+import org.junit.Before
+import org.junit.Test
+import org.junit.runner.RunWith
+import org.mockito.Mock
+import org.mockito.junit.MockitoJUnitRunner
+import org.mockito.kotlin.*
+import kotlin.test.assertEquals
+import kotlin.test.assertTrue
+
+@OptIn(ExperimentalCoroutinesApi::class)
+@RunWith(MockitoJUnitRunner::class)
+class AutoLockUseCaseTest {
+
+    @Mock
+    private lateinit var authUseCase: AuthUseCase
+
+    @Mock
+    private lateinit var lifecycleOwner: LifecycleOwner
+
+    private lateinit var autoLockUseCase: AutoLockUseCase
+    private val testDispatcher = StandardTestDispatcher()
+
+    @Before
+    fun setup() {
+        Dispatchers.setMain(testDispatcher)
+        
+        // Mock authenticated state by default
+        whenever(authUseCase.isAuthenticated).thenReturn(kotlinx.coroutines.flow.MutableStateFlow(true))
+        
+        autoLockUseCase = AutoLockUseCase(authUseCase)
+    }
+
+    @After
+    fun tearDown() {
+        Dispatchers.resetMain()
+        autoLockUseCase.cleanup()
+    }
+
+    @Test
+    fun `initial state should be locked`() {
+        // When
+        val initialState = autoLockUseCase.appLockState.value
+
+        // Then
+        assertEquals(AppLockState.Locked, initialState)
+        assertTrue(autoLockUseCase.isAppLocked())
+    }
+
+    @Test
+    fun `startInactivityTimer should unlock app when authenticated`() = runTest {
+        // Given
+        whenever(authUseCase.isAuthenticated.value).thenReturn(true)
+
+        // When
+        autoLockUseCase.startInactivityTimer()
+        testDispatcher.scheduler.advanceUntilIdle()
+
+        // Then
+        assertEquals(AppLockState.Unlocked, autoLockUseCase.appLockState.value)
+    }
+
+    @Test
+    fun `startInactivityTimer should not unlock app when not authenticated`() = runTest {
+        // Given
+        whenever(authUseCase.isAuthenticated.value).thenReturn(false)
+
+        // When
+        autoLockUseCase.startInactivityTimer()
+        testDispatcher.scheduler.advanceUntilIdle()
+
+        // Then
+        assertEquals(AppLockState.Locked, autoLockUseCase.appLockState.value)
+    }
+
+    @Test
+    fun `app should start countdown after inactivity timeout`() = runTest {
+        // Given
+        whenever(authUseCase.isAuthenticated.value).thenReturn(true)
+        autoLockUseCase.startInactivityTimer()
+        testDispatcher.scheduler.advanceUntilIdle()
+
+        // When - advance time by 60 seconds (inactivity timeout)
+        testDispatcher.scheduler.advanceTimeBy(60_000L)
+        testDispatcher.scheduler.advanceUntilIdle()
+
+        // Then
+        val state = autoLockUseCase.appLockState.value
+        assertTrue(state is AppLockState.AutoLocking)
+        assertEquals(10, (state as AppLockState.AutoLocking).remainingSeconds)
+    }
+
+    @Test
+    fun `app should lock after countdown completes`() = runTest {
+        // Given
+        whenever(authUseCase.isAuthenticated.value).thenReturn(true)
+        autoLockUseCase.startInactivityTimer()
+        testDispatcher.scheduler.advanceUntilIdle()
+
+        // When - advance time by 60 seconds (inactivity) + 10 seconds (countdown)
+        testDispatcher.scheduler.advanceTimeBy(60_000L)
+        testDispatcher.scheduler.advanceUntilIdle()
+        testDispatcher.scheduler.advanceTimeBy(10_000L)
+        testDispatcher.scheduler.advanceUntilIdle()
+
+        // Then
+        assertEquals(AppLockState.Locked, autoLockUseCase.appLockState.value)
+        verify(authUseCase).logout()
+    }
+
+    @Test
+    fun `resetInactivityTimer should cancel countdown and restart timer`() = runTest {
+        // Given
+        whenever(authUseCase.isAuthenticated.value).thenReturn(true)
+        autoLockUseCase.startInactivityTimer()
+        testDispatcher.scheduler.advanceUntilIdle()
+        
+        // Start countdown
+        testDispatcher.scheduler.advanceTimeBy(60_000L)
+        testDispatcher.scheduler.advanceUntilIdle()
+        assertTrue(autoLockUseCase.appLockState.value is AppLockState.AutoLocking)
+
+        // When - reset timer during countdown
+        autoLockUseCase.resetInactivityTimer()
+        testDispatcher.scheduler.advanceUntilIdle()
+
+        // Then
+        assertEquals(AppLockState.Unlocked, autoLockUseCase.appLockState.value)
+    }
+
+    @Test
+    fun `resetInactivityTimer should not work when not authenticated`() = runTest {
+        // Given
+        whenever(authUseCase.isAuthenticated.value).thenReturn(false)
+
+        // When
+        autoLockUseCase.resetInactivityTimer()
+        testDispatcher.scheduler.advanceUntilIdle()
+
+        // Then
+        assertEquals(AppLockState.Locked, autoLockUseCase.appLockState.value)
+    }
+
+    @Test
+    fun `lockApp should immediately lock and clear authentication`() = runTest {
+        // Given
+        whenever(authUseCase.isAuthenticated.value).thenReturn(true)
+        autoLockUseCase.startInactivityTimer()
+        testDispatcher.scheduler.advanceUntilIdle()
+        assertEquals(AppLockState.Unlocked, autoLockUseCase.appLockState.value)
+
+        // When
+        autoLockUseCase.lockApp()
+
+        // Then
+        assertEquals(AppLockState.Locked, autoLockUseCase.appLockState.value)
+        verify(authUseCase).logout()
+        assertTrue(autoLockUseCase.isAppLocked())
+    }
+
+    @Test
+    fun `onStart should lock app if previously unlocked`() = runTest {
+        // Given
+        whenever(authUseCase.isAuthenticated.value).thenReturn(true)
+        autoLockUseCase.startInactivityTimer()
+        testDispatcher.scheduler.advanceUntilIdle()
+        assertEquals(AppLockState.Unlocked, autoLockUseCase.appLockState.value)
+
+        // When - simulate app coming to foreground
+        autoLockUseCase.onStart(lifecycleOwner)
+
+        // Then
+        assertEquals(AppLockState.Locked, autoLockUseCase.appLockState.value)
+        verify(authUseCase).logout()
+    }
+
+    @Test
+    fun `onStop should immediately lock app`() = runTest {
+        // Given
+        whenever(authUseCase.isAuthenticated.value).thenReturn(true)
+        autoLockUseCase.startInactivityTimer()
+        testDispatcher.scheduler.advanceUntilIdle()
+        assertEquals(AppLockState.Unlocked, autoLockUseCase.appLockState.value)
+
+        // When - simulate app going to background
+        autoLockUseCase.onStop(lifecycleOwner)
+
+        // Then
+        assertEquals(AppLockState.Locked, autoLockUseCase.appLockState.value)
+        verify(authUseCase).logout()
+    }
+
+    @Test
+    fun `onAuthenticationSuccess should start timer when app in foreground`() = runTest {
+        // Given
+        whenever(authUseCase.isAuthenticated.value).thenReturn(true)
+        // Simulate app in foreground
+        autoLockUseCase.onStart(lifecycleOwner)
+
+        // When
+        autoLockUseCase.onAuthenticationSuccess()
+        testDispatcher.scheduler.advanceUntilIdle()
+
+        // Then
+        assertEquals(AppLockState.Unlocked, autoLockUseCase.appLockState.value)
+    }
+
+    @Test
+    fun `onAuthenticationSuccess should keep app locked when in background`() = runTest {
+        // Given
+        whenever(authUseCase.isAuthenticated.value).thenReturn(true)
+        // Simulate app in background
+        autoLockUseCase.onStop(lifecycleOwner)
+
+        // When
+        autoLockUseCase.onAuthenticationSuccess()
+        testDispatcher.scheduler.advanceUntilIdle()
+
+        // Then
+        assertEquals(AppLockState.Locked, autoLockUseCase.appLockState.value)
+    }
+
+    @Test
+    fun `getRemainingTimeMs should return correct time during countdown`() = runTest {
+        // Given
+        whenever(authUseCase.isAuthenticated.value).thenReturn(true)
+        autoLockUseCase.startInactivityTimer()
+        testDispatcher.scheduler.advanceUntilIdle()
+        
+        // Start countdown
+        testDispatcher.scheduler.advanceTimeBy(60_000L)
+        testDispatcher.scheduler.advanceUntilIdle()
+
+        // When
+        val remainingTime = autoLockUseCase.getRemainingTimeMs()
+
+        // Then
+        assertEquals(10_000L, remainingTime) // 10 seconds in countdown
+    }
+
+    @Test
+    fun `getRemainingTimeMs should return 0 when locked`() {
+        // Given - app is locked by default
+
+        // When
+        val remainingTime = autoLockUseCase.getRemainingTimeMs()
+
+        // Then
+        assertEquals(0L, remainingTime)
+    }
+
+    @Test
+    fun `observeAppState should return current state flow`() {
+        // When
+        val stateFlow = autoLockUseCase.observeAppState()
+
+        // Then
+        assertEquals(autoLockUseCase.appLockState, stateFlow)
+        assertEquals(AppLockState.Locked, stateFlow.value)
+    }
+
+    @Test
+    fun `countdown should decrement remaining seconds`() = runTest {
+        // Given
+        whenever(authUseCase.isAuthenticated.value).thenReturn(true)
+        autoLockUseCase.startInactivityTimer()
+        testDispatcher.scheduler.advanceUntilIdle()
+        
+        // Start countdown
+        testDispatcher.scheduler.advanceTimeBy(60_000L)
+        testDispatcher.scheduler.advanceUntilIdle()
+        
+        val initialState = autoLockUseCase.appLockState.value as AppLockState.AutoLocking
+        assertEquals(10, initialState.remainingSeconds)
+
+        // When - advance 3 seconds
+        testDispatcher.scheduler.advanceTimeBy(3_000L)
+        testDispatcher.scheduler.advanceUntilIdle()
+
+        // Then
+        val currentState = autoLockUseCase.appLockState.value as AppLockState.AutoLocking
+        assertEquals(7, currentState.remainingSeconds)
+    }
+}

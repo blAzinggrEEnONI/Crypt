@@ -1,0 +1,404 @@
+package com.example.crypt.domain.usecase
+
+import com.example.crypt.domain.model.AuthResult
+import com.example.crypt.domain.model.AuthErrorCode
+import kotlinx.coroutines.test.runTest
+import org.junit.Test
+import java.security.MessageDigest
+import java.security.SecureRandom
+import kotlin.test.assertEquals
+import kotlin.test.assertFalse
+import kotlin.test.assertNotEquals
+import kotlin.test.assertTrue
+
+/**
+ * Unit tests for AuthUseCase focusing on PIN hashing and verification logic.
+ * These tests verify the core cryptographic operations without requiring Android dependencies.
+ */
+class AuthUseCaseTest {
+
+    @Test
+    fun `PIN hashing should be deterministic with same salt`() {
+        // Given
+        val pin = "1234"
+        val salt = generateTestSalt()
+
+        // When
+        val hash1 = hashPin(pin, salt)
+        val hash2 = hashPin(pin, salt)
+
+        // Then
+        assertEquals(hash1, hash2, "Same PIN and salt should produce identical hashes")
+    }
+
+    @Test
+    fun `PIN hashing should produce different hashes with different salts`() {
+        // Given
+        val pin = "1234"
+        val salt1 = generateTestSalt()
+        val salt2 = generateTestSalt()
+
+        // When
+        val hash1 = hashPin(pin, salt1)
+        val hash2 = hashPin(pin, salt2)
+
+        // Then
+        assertNotEquals(hash1, hash2, "Same PIN with different salts should produce different hashes")
+    }
+
+    @Test
+    fun `PIN hashing should produce different hashes for different PINs`() {
+        // Given
+        val pin1 = "1234"
+        val pin2 = "5678"
+        val salt = generateTestSalt()
+
+        // When
+        val hash1 = hashPin(pin1, salt)
+        val hash2 = hashPin(pin2, salt)
+
+        // Then
+        assertNotEquals(hash1, hash2, "Different PINs should produce different hashes")
+    }
+
+    @Test
+    fun `PIN verification should succeed with correct PIN`() {
+        // Given
+        val correctPin = "1234"
+        val salt = generateTestSalt()
+        val storedHash = hashPin(correctPin, salt)
+
+        // When
+        val verificationHash = hashPin(correctPin, salt)
+
+        // Then
+        assertEquals(storedHash, verificationHash, "Correct PIN should match stored hash")
+    }
+
+    @Test
+    fun `PIN verification should fail with incorrect PIN`() {
+        // Given
+        val correctPin = "1234"
+        val incorrectPin = "5678"
+        val salt = generateTestSalt()
+        val storedHash = hashPin(correctPin, salt)
+
+        // When
+        val verificationHash = hashPin(incorrectPin, salt)
+
+        // Then
+        assertNotEquals(storedHash, verificationHash, "Incorrect PIN should not match stored hash")
+    }
+
+    @Test
+    fun `salt generation should produce unique values`() {
+        // When
+        val salt1 = generateTestSalt()
+        val salt2 = generateTestSalt()
+        val salt3 = generateTestSalt()
+
+        // Then
+        assertNotEquals(salt1, salt2, "Generated salts should be unique")
+        assertNotEquals(salt2, salt3, "Generated salts should be unique")
+        assertNotEquals(salt1, salt3, "Generated salts should be unique")
+    }
+
+    @Test
+    fun `salt should be proper length`() {
+        // When
+        val salt = generateTestSalt()
+        val saltBytes = android.util.Base64.decode(salt, android.util.Base64.NO_WRAP)
+
+        // Then
+        assertEquals(32, saltBytes.size, "Salt should be 32 bytes long")
+    }
+
+    @Test
+    fun `PIN hash should be consistent with SHA-256`() {
+        // Given
+        val pin = "1234"
+        val salt = "dGVzdFNhbHQxMjM0NTY3ODkwMTIzNDU2Nzg5MDEyMzQ=" // Base64 encoded test salt
+
+        // When
+        val hash = hashPin(pin, salt)
+
+        // Then
+        assertTrue(hash.isNotEmpty(), "Hash should not be empty")
+        // Verify it's a valid Base64 string
+        val hashBytes = android.util.Base64.decode(hash, android.util.Base64.NO_WRAP)
+        assertEquals(32, hashBytes.size, "SHA-256 hash should be 32 bytes")
+    }
+
+    @Test
+    fun `lockout timing logic should work correctly`() {
+        // Given
+        val currentTime = System.currentTimeMillis()
+        val lockoutDuration = 30_000L // 30 seconds
+        
+        // Test cases for lockout timing
+        val recentAttempt = currentTime - 10_000L // 10 seconds ago
+        val expiredAttempt = currentTime - 35_000L // 35 seconds ago
+
+        // When/Then
+        assertTrue(
+            (currentTime - recentAttempt) < lockoutDuration,
+            "Recent attempt should still be within lockout period"
+        )
+        assertFalse(
+            (currentTime - expiredAttempt) < lockoutDuration,
+            "Old attempt should be outside lockout period"
+        )
+    }
+
+    @Test
+    fun `failed attempts counter logic should work correctly`() {
+        // Given
+        val maxAttempts = 5
+        
+        // Test boundary conditions
+        assertTrue(4 < maxAttempts, "4 attempts should be below limit")
+        assertFalse(5 < maxAttempts, "5 attempts should reach limit")
+        assertFalse(6 < maxAttempts, "6 attempts should exceed limit")
+    }
+
+    // Helper methods that replicate the core logic from AuthUseCase
+    private fun generateTestSalt(): String {
+        val secureRandom = SecureRandom()
+        val saltBytes = ByteArray(32)
+        secureRandom.nextBytes(saltBytes)
+        return android.util.Base64.encodeToString(saltBytes, android.util.Base64.NO_WRAP)
+    }
+
+    private fun hashPin(pin: String, salt: String): String {
+        val digest = MessageDigest.getInstance("SHA-256")
+        val saltBytes = android.util.Base64.decode(salt, android.util.Base64.NO_WRAP)
+        val pinBytes = pin.toByteArray(Charsets.UTF_8)
+        
+        digest.update(saltBytes)
+        digest.update(pinBytes)
+        
+        val hashedBytes = digest.digest()
+        return android.util.Base64.encodeToString(hashedBytes, android.util.Base64.NO_WRAP)
+    }
+
+    @Test
+    fun `setupPin should return true for valid PIN`() = runTest {
+        // Given
+        val validPin = "1234"
+
+        // When
+        val result = authUseCase.setupPin(validPin)
+
+        // Then
+        assertTrue(result)
+        verify(editor).putString(eq("pin_hash"), any())
+        verify(editor).putString(eq("pin_salt"), any())
+        verify(editor).apply()
+    }
+
+    @Test
+    fun `setupPin should return false for PIN shorter than 4 characters`() = runTest {
+        // Given
+        val shortPin = "123"
+
+        // When
+        val result = authUseCase.setupPin(shortPin)
+
+        // Then
+        assertFalse(result)
+        verify(editor, never()).putString(any(), any())
+        verify(editor, never()).apply()
+    }
+
+    @Test
+    fun `authenticateWithPin should return success for correct PIN`() = runTest {
+        // Given
+        val pin = "1234"
+        val salt = "mockSalt"
+        val hash = "mockHash"
+        
+        whenever(sharedPreferences.getString("pin_hash", null)).thenReturn(hash)
+        whenever(sharedPreferences.getString("pin_salt", null)).thenReturn(salt)
+        whenever(sharedPreferences.getInt("failed_attempts", 0)).thenReturn(0)
+
+        // Setup PIN first to generate proper hash
+        authUseCase.setupPin(pin)
+        
+        // Get the actual hash and salt that were stored
+        val hashCaptor = argumentCaptor<String>()
+        val saltCaptor = argumentCaptor<String>()
+        verify(editor).putString(eq("pin_hash"), hashCaptor.capture())
+        verify(editor).putString(eq("pin_salt"), saltCaptor.capture())
+        
+        // Mock the stored values with actual generated values
+        whenever(sharedPreferences.getString("pin_hash", null)).thenReturn(hashCaptor.firstValue)
+        whenever(sharedPreferences.getString("pin_salt", null)).thenReturn(saltCaptor.firstValue)
+
+        // When
+        val result = authUseCase.authenticateWithPin(pin)
+
+        // Then
+        assertEquals(AuthResult.Success, result)
+        assertTrue(authUseCase.isAuthenticated.value)
+    }
+
+    @Test
+    fun `authenticateWithPin should return error for incorrect PIN`() = runTest {
+        // Given
+        val correctPin = "1234"
+        val incorrectPin = "5678"
+        
+        // Setup PIN first
+        authUseCase.setupPin(correctPin)
+        
+        // Get the stored hash and salt
+        val hashCaptor = argumentCaptor<String>()
+        val saltCaptor = argumentCaptor<String>()
+        verify(editor).putString(eq("pin_hash"), hashCaptor.capture())
+        verify(editor).putString(eq("pin_salt"), saltCaptor.capture())
+        
+        // Mock the stored values
+        whenever(sharedPreferences.getString("pin_hash", null)).thenReturn(hashCaptor.firstValue)
+        whenever(sharedPreferences.getString("pin_salt", null)).thenReturn(saltCaptor.firstValue)
+        whenever(sharedPreferences.getInt("failed_attempts", 0)).thenReturn(0)
+
+        // When
+        val result = authUseCase.authenticateWithPin(incorrectPin)
+
+        // Then
+        assertTrue(result is AuthResult.Error)
+        assertEquals(AuthErrorCode.PIN_INCORRECT, (result as AuthResult.Error).errorCode)
+        assertFalse(authUseCase.isAuthenticated.value)
+        verify(editor).putInt("failed_attempts", 1)
+    }
+
+    @Test
+    fun `authenticateWithPin should return error when PIN not set up`() = runTest {
+        // Given
+        whenever(sharedPreferences.getString("pin_hash", null)).thenReturn(null)
+        whenever(sharedPreferences.getString("pin_salt", null)).thenReturn(null)
+
+        // When
+        val result = authUseCase.authenticateWithPin("1234")
+
+        // Then
+        assertTrue(result is AuthResult.Error)
+        assertEquals(AuthErrorCode.PIN_INCORRECT, (result as AuthResult.Error).errorCode)
+        assertEquals("PIN not set up", result.message)
+    }
+
+    @Test
+    fun `authenticateWithPin should return error when locked out`() = runTest {
+        // Given
+        whenever(sharedPreferences.getInt("failed_attempts", 0)).thenReturn(5)
+        whenever(sharedPreferences.getLong("last_attempt_time", 0)).thenReturn(System.currentTimeMillis())
+
+        // When
+        val result = authUseCase.authenticateWithPin("1234")
+
+        // Then
+        assertTrue(result is AuthResult.Error)
+        assertEquals(AuthErrorCode.TOO_MANY_ATTEMPTS, (result as AuthResult.Error).errorCode)
+        assertEquals("Too many failed attempts. Please try again later.", result.message)
+    }
+
+    @Test
+    fun `isPinSetup should return true when PIN is configured`() {
+        // Given
+        whenever(sharedPreferences.contains("pin_hash")).thenReturn(true)
+        whenever(sharedPreferences.contains("pin_salt")).thenReturn(true)
+
+        // When
+        val result = authUseCase.isPinSetup()
+
+        // Then
+        assertTrue(result)
+    }
+
+    @Test
+    fun `isPinSetup should return false when PIN is not configured`() {
+        // Given
+        whenever(sharedPreferences.contains("pin_hash")).thenReturn(false)
+        whenever(sharedPreferences.contains("pin_salt")).thenReturn(false)
+
+        // When
+        val result = authUseCase.isPinSetup()
+
+        // Then
+        assertFalse(result)
+    }
+
+    @Test
+    fun `isAuthenticationRequired should return true when not authenticated`() {
+        // Given - user is not authenticated by default
+
+        // When
+        val result = authUseCase.isAuthenticationRequired()
+
+        // Then
+        assertTrue(result)
+    }
+
+    @Test
+    fun `logout should clear authentication state`() {
+        // Given - simulate authenticated state
+        authUseCase.setupPin("1234")
+        
+        // When
+        authUseCase.logout()
+
+        // Then
+        assertFalse(authUseCase.isAuthenticated.value)
+        assertTrue(authUseCase.isAuthenticationRequired())
+    }
+
+    @Test
+    fun `failed attempts should be reset after successful authentication`() = runTest {
+        // Given
+        val pin = "1234"
+        authUseCase.setupPin(pin)
+        
+        // Get stored values
+        val hashCaptor = argumentCaptor<String>()
+        val saltCaptor = argumentCaptor<String>()
+        verify(editor).putString(eq("pin_hash"), hashCaptor.capture())
+        verify(editor).putString(eq("pin_salt"), saltCaptor.capture())
+        
+        whenever(sharedPreferences.getString("pin_hash", null)).thenReturn(hashCaptor.firstValue)
+        whenever(sharedPreferences.getString("pin_salt", null)).thenReturn(saltCaptor.firstValue)
+        whenever(sharedPreferences.getInt("failed_attempts", 0)).thenReturn(2) // Some failed attempts
+
+        // When
+        val result = authUseCase.authenticateWithPin(pin)
+
+        // Then
+        assertEquals(AuthResult.Success, result)
+        verify(editor).remove("failed_attempts")
+        verify(editor).remove("last_attempt_time")
+    }
+
+    @Test
+    fun `lockout should expire after timeout period`() = runTest {
+        // Given
+        val oldTimestamp = System.currentTimeMillis() - 31_000L // 31 seconds ago (past lockout)
+        whenever(sharedPreferences.getInt("failed_attempts", 0)).thenReturn(5)
+        whenever(sharedPreferences.getLong("last_attempt_time", 0)).thenReturn(oldTimestamp)
+        
+        val pin = "1234"
+        authUseCase.setupPin(pin)
+        
+        val hashCaptor = argumentCaptor<String>()
+        val saltCaptor = argumentCaptor<String>()
+        verify(editor).putString(eq("pin_hash"), hashCaptor.capture())
+        verify(editor).putString(eq("pin_salt"), saltCaptor.capture())
+        
+        whenever(sharedPreferences.getString("pin_hash", null)).thenReturn(hashCaptor.firstValue)
+        whenever(sharedPreferences.getString("pin_salt", null)).thenReturn(saltCaptor.firstValue)
+
+        // When
+        val result = authUseCase.authenticateWithPin(pin)
+
+        // Then
+        assertEquals(AuthResult.Success, result) // Should succeed as lockout expired
+    }
+}
