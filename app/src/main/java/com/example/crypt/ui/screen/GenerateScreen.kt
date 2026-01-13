@@ -99,7 +99,7 @@ fun GenerateScreen(
                     OutlinedButton(
                         onClick = { 
                             if (uiState.generatedPassword.isNotEmpty()) {
-                                copyToClipboard(context, uiState.generatedPassword)
+                                viewModel.copyPasswordToClipboard()
                                 viewModel.showMessage("Password copied to clipboard")
                             }
                         },
@@ -442,13 +442,4 @@ private fun SavePasswordDialog(
             }
         }
     )
-}
-
-/**
- * Utility function to copy text to clipboard.
- */
-private fun copyToClipboard(context: Context, text: String) {
-    val clipboardManager = context.getSystemService(Context.CLIPBOARD_SERVICE) as ClipboardManager
-    val clipData = ClipData.newPlainText("Generated Password", text)
-    clipboardManager.setPrimaryClip(clipData)
 }

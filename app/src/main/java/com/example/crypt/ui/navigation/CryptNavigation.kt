@@ -1,7 +1,9 @@
 package com.example.crypt.ui.navigation
 
+import androidx.compose.foundation.layout.WindowInsets
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.safeDrawing
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Lock
 import androidx.compose.material.icons.filled.Settings
@@ -22,12 +24,12 @@ import androidx.navigation.compose.rememberNavController
 import com.example.crypt.domain.model.AuthState
 import com.example.crypt.ui.screen.*
 import com.example.crypt.ui.viewmodel.AuthViewModel
+import com.example.crypt.ui.viewmodel.NavigationEvent
 
 /**
  * Main navigation component that handles routing between authentication and main app screens.
  * Implements conditional navigation based on authentication state as per requirements 1.1 and 1.3.
  */
-@OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun CryptNavigation(
     navController: NavHostController = rememberNavController(),
@@ -39,65 +41,29 @@ fun CryptNavigation(
     LaunchedEffect(authViewModel) {
         authViewModel.navigationEvent.collect { event ->
             when (event) {
-                is com.example.crypt.ui.viewmodel.NavigationEvent.NavigateToMain -> {
+                is NavigationEvent.NavigateToMain -> {
                     navController.navigate(MainNavigation.VAULT) {
                         popUpTo(AuthNavigation.AUTH) { inclusive = true }
                     }
                 }
-                is com.example.crypt.ui.viewmodel.NavigationEvent.ShowMessage -> {
+                is NavigationEvent.ShowMessage -> {
                     // Handle message display if needed
                 }
             }
         }
     }
-    
-    // Determine start destination based on authentication state
-    val startDestination = if (authState is AuthState.Authenticated) {
-        MainNavigation.VAULT
-    } else {
-        AuthNavigation.AUTH
-    }
-    
-    when (authState) {
-        is AuthState.Authenticated -> {
-            // Show main app with bottom navigation
-            MainAppNavigation(navController = navController, authViewModel = authViewModel)
-        }
-        else -> {
-            // Show authentication screen
-            NavHost(
-                navController = navController,
-                startDestination = AuthNavigation.AUTH
-            ) {
-                composable(AuthNavigation.AUTH) {
-                    AuthScreenContainer(authViewModel = authViewModel)
-                }
-            }
-        }
-    }
-}
 
-/**
- * Main app navigation with bottom navigation bar for Generate and Vault screens.
- * Implements bottom navigation as per requirements 1.1 and 1.3.
- */
-@OptIn(ExperimentalMaterial3Api::class)
-@Composable
-fun MainAppNavigation(
-    navController: NavHostController,
-    authViewModel: AuthViewModel
-) {
     val navBackStackEntry by navController.currentBackStackEntryAsState()
     val currentDestination = navBackStackEntry?.destination
     
     Scaffold(
         modifier = Modifier.fillMaxSize(),
+        contentWindowInsets = WindowInsets.safeDrawing,
         bottomBar = {
             // Only show bottom navigation for main screens (Generate and Vault)
-            val showBottomBar = currentDestination?.route in listOf(
-                MainNavigation.GENERATE,
-                MainNavigation.VAULT
-            )
+            // and only when authenticated
+            val showBottomBar = authState is AuthState.Authenticated && 
+                currentDestination?.route in listOf(MainNavigation.GENERATE, MainNavigation.VAULT)
             
             if (showBottomBar) {
                 NavigationBar {
@@ -108,15 +74,10 @@ fun MainAppNavigation(
                             selected = currentDestination?.hierarchy?.any { it.route == item.route } == true,
                             onClick = {
                                 navController.navigate(item.route) {
-                                    // Pop up to the start destination of the graph to
-                                    // avoid building up a large stack of destinations
                                     popUpTo(navController.graph.findStartDestination().id) {
                                         saveState = true
                                     }
-                                    // Avoid multiple copies of the same destination when
-                                    // reselecting the same item
                                     launchSingleTop = true
-                                    // Restore state when reselecting a previously selected item
                                     restoreState = true
                                 }
                             }
@@ -128,9 +89,15 @@ fun MainAppNavigation(
     ) { innerPadding ->
         NavHost(
             navController = navController,
-            startDestination = MainNavigation.VAULT,
+            startDestination = if (authState is AuthState.Authenticated) MainNavigation.VAULT else AuthNavigation.AUTH,
             modifier = Modifier.padding(innerPadding)
         ) {
+            // Auth Flow
+            composable(AuthNavigation.AUTH) {
+                AuthScreenContainer(authViewModel = authViewModel)
+            }
+
+            // Main App Flow
             composable(MainNavigation.GENERATE) {
                 GenerateScreen(
                     onNavigateToVault = {
@@ -152,7 +119,7 @@ fun MainAppNavigation(
             
             composable("${MainNavigation.VIEW_ENTRY}/{entryId}") { backStackEntry ->
                 val entryId = backStackEntry.arguments?.getString("entryId")?.toLongOrNull() ?: 0L
-                ViewEntryScreenWrapper(
+                ViewEntryScreen(
                     entryId = entryId,
                     onNavigateBack = {
                         navController.popBackStack()
@@ -168,7 +135,7 @@ fun MainAppNavigation(
             
             composable(MainNavigation.EDIT_ENTRY) {
                 EditEntryScreen(
-                    entryId = null, // New entry
+                    entryId = null,
                     onNavigateBack = {
                         navController.popBackStack()
                     },
@@ -265,4 +232,3 @@ private fun AuthScreenContainer(
         }
     )
 }
-

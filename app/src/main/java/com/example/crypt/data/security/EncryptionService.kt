@@ -1,6 +1,7 @@
 package com.example.crypt.data.security
 
 import android.util.Base64
+import android.util.Log
 import java.security.SecureRandom
 import javax.crypto.Cipher
 import javax.crypto.spec.GCMParameterSpec
@@ -19,6 +20,7 @@ class EncryptionService @Inject constructor(
 ) {
     
     companion object {
+        private const val TAG = "EncryptionService"
         private const val TRANSFORMATION = "AES/GCM/NoPadding"
         private const val IV_LENGTH = 12 // 96 bits for GCM
         private const val TAG_LENGTH = 16 // 128 bits for authentication tag
@@ -41,6 +43,7 @@ class EncryptionService @Inject constructor(
         var combined: ByteArray? = null
         
         return try {
+            Log.d(TAG, "Starting encryption...")
             val masterKey = keystoreManager.getMasterKey()
             val cipher = Cipher.getInstance(TRANSFORMATION)
             
@@ -63,10 +66,12 @@ class EncryptionService @Inject constructor(
             System.arraycopy(iv, 0, combined, 0, IV_LENGTH)
             System.arraycopy(encryptedData, 0, combined, IV_LENGTH, encryptedData.size)
             
+            Log.d(TAG, "Encryption successful")
             // Return Base64 encoded result
             Base64.encodeToString(combined, Base64.NO_WRAP)
         } catch (e: Exception) {
-            throw SecurityException("Encryption failed", e)
+            Log.e(TAG, "Encryption failed: ${e.message}", e)
+            throw SecurityException("Encryption failed: ${e.message}", e)
         } finally {
             // Securely clear sensitive data from memory
             plaintextBytes?.let { secureMemoryManager.clearByteArray(it) }
@@ -93,6 +98,7 @@ class EncryptionService @Inject constructor(
         var decryptedBytes: ByteArray? = null
         
         return try {
+            Log.d(TAG, "Starting decryption...")
             val masterKey = keystoreManager.getMasterKey()
             val cipher = Cipher.getInstance(TRANSFORMATION)
             
@@ -119,10 +125,12 @@ class EncryptionService @Inject constructor(
             // Decrypt and verify authentication tag
             decryptedBytes = cipher.doFinal(encryptedBytes)
             
+            Log.d(TAG, "Decryption successful")
             // Convert to string and return
             String(decryptedBytes, Charsets.UTF_8)
         } catch (e: Exception) {
-            throw SecurityException("Decryption failed", e)
+            Log.e(TAG, "Decryption failed: ${e.message}", e)
+            throw SecurityException("Decryption failed: ${e.message}", e)
         } finally {
             // Securely clear sensitive data from memory
             combined?.let { secureMemoryManager.clearByteArray(it) }

@@ -17,10 +17,13 @@ import javax.inject.Inject
  * Manages generation configuration state, handles password generation,
  * clipboard operations, and integration with PasswordRepository for saving passwords.
  */
+import com.example.crypt.domain.service.SecureClipboardManager
+
 @HiltViewModel
 class GenerateViewModel @Inject constructor(
     private val generatePasswordUseCase: GeneratePasswordUseCase,
-    private val passwordRepository: PasswordRepository
+    private val passwordRepository: PasswordRepository,
+    private val secureClipboardManager: SecureClipboardManager
 ) : ViewModel() {
     
     private val _uiState = MutableStateFlow(GenerateUiState())
@@ -57,6 +60,16 @@ class GenerateViewModel @Inject constructor(
                     isError = true
                 )
             }
+        }
+    }
+
+    /**
+     * Copy generated password to clipboard.
+     */
+    fun copyPasswordToClipboard() {
+        val password = _uiState.value.generatedPassword
+        if (password.isNotEmpty()) {
+            secureClipboardManager.copyToClipboard("Generated Password", password)
         }
     }
     

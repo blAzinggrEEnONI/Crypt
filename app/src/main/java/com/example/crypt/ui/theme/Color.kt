@@ -2,10 +2,17 @@ package com.example.crypt.ui.theme
 
 import androidx.compose.ui.graphics.Color
 
-val Purple80 = Color(0xFFD0BCFF)
-val PurpleGrey80 = Color(0xFFCCC2DC)
-val Pink80 = Color(0xFFEFB8C8)
+val NeonGreen = Color(0xFF00FF41)
+val NeonCyan = Color(0xFF00E5FF)
+val DeepNavy = Color(0xFF020C1B)
+val DarkSlate = Color(0xFF112240)
+val LightSlate = Color(0xFF233554)
+val OffWhite = Color(0xFFCCD6F6)
 
-val Purple40 = Color(0xFF6650a4)
-val PurpleGrey40 = Color(0xFF625b71)
-val Pink40 = Color(0xFF7D5260)
+// Cyber Theme Palette
+val PrimaryColor = NeonGreen
+val SecondaryColor = NeonCyan
+val BackgroundColor = DeepNavy
+val SurfaceColor = DarkSlate
+val OnPrimaryColor = DeepNavy // Black text on neon green
+val OnBackgroundColor = OffWhite

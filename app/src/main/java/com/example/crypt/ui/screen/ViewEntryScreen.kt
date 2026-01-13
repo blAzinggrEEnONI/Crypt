@@ -24,7 +24,7 @@ import androidx.fragment.app.FragmentActivity
 import androidx.hilt.navigation.compose.hiltViewModel
 import com.example.crypt.domain.model.AuthResult
 import com.example.crypt.ui.viewmodel.EntryViewModel
-import com.example.crypt.domain.usecase.AuthUseCase
+
 import kotlinx.coroutines.launch
 import java.text.SimpleDateFormat
 import java.util.*
@@ -39,7 +39,6 @@ import java.util.*
 fun ViewEntryScreen(
     entryId: Long,
     viewModel: EntryViewModel = hiltViewModel(),
-    authUseCase: AuthUseCase,
     onNavigateBack: () -> Unit = {},
     onNavigateToEdit: (Long) -> Unit = {},
     onEntryDeleted: () -> Unit = {}
@@ -65,8 +64,8 @@ fun ViewEntryScreen(
         LaunchedEffect(Unit) {
             try {
                 val activity = context as FragmentActivity
-                val result = if (authUseCase.isBiometricAvailable()) {
-                    authUseCase.authenticateWithBiometrics(activity)
+                val result = if (viewModel.isBiometricAvailable()) {
+                    viewModel.authenticateWithBiometrics(activity)
                 } else {
                     // For this implementation, we'll assume PIN authentication is handled elsewhere
                     // In a real app, you'd show a PIN input dialog here
@@ -247,10 +246,8 @@ fun ViewEntryScreen(
                                 content = entry.username,
                                 icon = Icons.Default.Person,
                                 onCopy = {
-                                    val username = viewModel.copyUsernameToClipboard()
-                                    if (username != null) {
-                                        copyToClipboard(context, "Username", username)
-                                    }
+                                    viewModel.copyUsernameToClipboard()
+                                    android.widget.Toast.makeText(context, "Username copied", android.widget.Toast.LENGTH_SHORT).show()
                                 }
                             )
                         
@@ -261,10 +258,8 @@ fun ViewEntryScreen(
                             isAuthenticating = uiState.isAuthenticating,
                             onToggleVisibility = { viewModel.togglePasswordVisibility() },
                             onCopy = {
-                                val password = viewModel.copyPasswordToClipboard()
-                                if (password != null) {
-                                    copyToClipboard(context, "Password", password)
-                                }
+                                viewModel.copyPasswordToClipboard()
+                                android.widget.Toast.makeText(context, "Password copied", android.widget.Toast.LENGTH_SHORT).show()
                             }
                         )
                         
@@ -638,17 +633,7 @@ private fun MetadataCard(
     }
 }
 
-/**
- * Copy text to system clipboard and show feedback.
- */
-private fun copyToClipboard(context: Context, label: String, text: String) {
-    val clipboardManager = context.getSystemService(Context.CLIPBOARD_SERVICE) as ClipboardManager
-    val clipData = ClipData.newPlainText(label, text)
-    clipboardManager.setPrimaryClip(clipData)
-    
-    // Note: In a real app, you'd show a snackbar or toast here
-    // For this implementation, we'll rely on the system clipboard feedback
-}
+
 
 /**
  * Format timestamp to readable date and time string.

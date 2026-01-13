@@ -11,14 +11,13 @@ import kotlinx.coroutines.flow.*
 import kotlinx.coroutines.launch
 import javax.inject.Inject
 
-/**
- * ViewModel for password entry detail and edit screens.
- * Handles entry state management, authentication requirements, and CRUD operations.
- */
+import com.example.crypt.domain.service.SecureClipboardManager
+
 @HiltViewModel
 class EntryViewModel @Inject constructor(
     private val passwordRepository: PasswordRepository,
-    private val authUseCase: AuthUseCase
+    private val authUseCase: AuthUseCase,
+    private val secureClipboardManager: SecureClipboardManager
 ) : ViewModel() {
     
     // Private mutable state
@@ -94,6 +93,20 @@ class EntryViewModel @Inject constructor(
     }
     
     /**
+     * Check if biometric authentication is available.
+     */
+    fun isBiometricAvailable(): Boolean {
+        return authUseCase.isBiometricAvailable()
+    }
+
+    /**
+     * Authenticate with biometrics.
+     */
+    suspend fun authenticateWithBiometrics(activity: androidx.fragment.app.FragmentActivity): AuthResult {
+        return authUseCase.authenticateWithBiometrics(activity)
+    }
+
+    /**
      * Handle authentication result and decrypt password if successful.
      */
     fun handleAuthenticationResult(result: AuthResult) {
@@ -146,15 +159,20 @@ class EntryViewModel @Inject constructor(
     /**
      * Copy password to clipboard (requires authentication first).
      */
-    fun copyPasswordToClipboard(): String? {
-        return _uiState.value.decryptedPassword
+    fun copyPasswordToClipboard() {
+        val decrypted = _uiState.value.decryptedPassword
+        if (decrypted != null) {
+            secureClipboardManager.copyToClipboard("Password", decrypted, isSensitive = true)
+        }
     }
     
     /**
      * Copy username to clipboard.
      */
-    fun copyUsernameToClipboard(): String? {
-        return currentEntry?.username
+    fun copyUsernameToClipboard() {
+        currentEntry?.username?.let { username ->
+            secureClipboardManager.copyToClipboard("Username", username, isSensitive = false)
+        }
     }
     
     /**

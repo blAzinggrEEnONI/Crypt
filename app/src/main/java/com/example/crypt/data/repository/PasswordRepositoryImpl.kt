@@ -1,5 +1,6 @@
 package com.example.crypt.data.repository
 
+import android.util.Log
 import com.example.crypt.data.database.CryptDatabase
 import com.example.crypt.data.database.PasswordEntry
 import com.example.crypt.data.security.EncryptionService
@@ -16,6 +17,10 @@ class PasswordRepositoryImpl @Inject constructor(
     private val database: CryptDatabase,
     private val encryptionService: EncryptionService
 ) : PasswordRepository {
+    
+    companion object {
+        private const val TAG = "PasswordRepository"
+    }
     
     private val passwordDao = database.passwordDao()
     
@@ -38,6 +43,7 @@ class PasswordRepositoryImpl @Inject constructor(
         notes: String?
     ): Long {
         return try {
+            Log.d(TAG, "Attempting to save entry for site: $site")
             // Encrypt the password
             val encryptedPassword = encryptionService.encrypt(password)
             
@@ -55,9 +61,12 @@ class PasswordRepositoryImpl @Inject constructor(
             )
             
             // Insert and return the ID
-            passwordDao.insertEntry(entry)
+            val id = passwordDao.insertEntry(entry)
+            Log.d(TAG, "Entry saved successfully with ID: $id")
+            id
         } catch (e: Exception) {
-            throw SecurityException("Failed to save password entry", e)
+            Log.e(TAG, "Failed to save entry: ${e.message}", e)
+            throw SecurityException("Failed to save password entry: ${e.message}", e)
         }
     }
     
@@ -67,6 +76,7 @@ class PasswordRepositoryImpl @Inject constructor(
         newNotes: String?
     ) {
         try {
+            Log.d(TAG, "Updating entry ID: ${entry.id}")
             var updatedEntry = entry.copy(updatedAt = System.currentTimeMillis())
             
             // Encrypt new password if provided
@@ -86,8 +96,10 @@ class PasswordRepositoryImpl @Inject constructor(
             }
             
             passwordDao.updateEntry(updatedEntry)
+            Log.d(TAG, "Entry updated successfully")
         } catch (e: Exception) {
-            throw SecurityException("Failed to update password entry", e)
+            Log.e(TAG, "Failed to update entry: ${e.message}", e)
+            throw SecurityException("Failed to update password entry: ${e.message}", e)
         }
     }
     

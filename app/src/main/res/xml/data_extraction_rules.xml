@@ -5,15 +5,16 @@
 -->
 <data-extraction-rules>
     <cloud-backup>
-        <!-- TODO: Use <include> and <exclude> to control what is backed up.
-        <include .../>
-        <exclude .../>
-        -->
+        <exclude domain="database" path="crypt_database.db"/>
+        <exclude domain="database" path="crypt_database.db-wal"/>
+        <exclude domain="database" path="crypt_database.db-shm"/>
+        <exclude domain="sharedpref" path="auth_prefs.xml"/>
+        <exclude domain="sharedpref" path="display_prefs.xml"/>
     </cloud-backup>
-    <!--
     <device-transfer>
-        <include .../>
-        <exclude .../>
+        <!-- Allow device-to-device transfer as it might move Keystore keys on some devices or user intends to migrate -->
+        <!-- But safer to exclude to force fresh setup if keys don't migrate -->
+        <exclude domain="database" path="crypt_database.db"/>
+        <exclude domain="sharedpref" path="auth_prefs.xml"/>
     </device-transfer>
-    -->
 </data-extraction-rules>

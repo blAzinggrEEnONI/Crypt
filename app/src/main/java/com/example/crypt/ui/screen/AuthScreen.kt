@@ -34,17 +34,14 @@ import kotlinx.coroutines.flow.collectLatest
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun AuthScreen(
-    authUseCase: AuthUseCase, // Pass AuthUseCase to handle biometric prompt
     authState: AuthState,
     isBiometricAvailable: Boolean,
     isPinSetup: Boolean,
     onBiometricAuthClick: () -> Unit,
     onPinAuthClick: (String) -> Unit,
     onSetupPinClick: (String) -> Unit,
-    onBiometricAuthResult: (com.example.crypt.domain.model.AuthResult) -> Unit, // Callback for result
     modifier: Modifier = Modifier
 ) {
-    val context = LocalContext.current
     val keyboardController = LocalSoftwareKeyboardController.current
 
     var pinText by remember { mutableStateOf("") }
@@ -61,17 +58,6 @@ fun AuthScreen(
             isSettingUpPin = false
             pinText = ""
             confirmPinText = ""
-        }
-    }
-
-    // Handle Biometric Authentication
-    LaunchedEffect(Unit) {
-        authUseCase.biometricAuthEvent.collectLatest { 
-            val activity = context as? FragmentActivity
-            if (activity != null) {
-                val result = authUseCase.authenticateWithBiometrics(activity)
-                onBiometricAuthResult(result)
-            }
         }
     }
 
@@ -398,17 +384,14 @@ private fun AuthenticationContent(
 @Composable
 fun AuthScreenPreview() {
     CryptTheme {
-        // This preview will not work as intended due to the AuthUseCase dependency
-//        AuthScreen(
-//            authUseCase = TODO(),
-//            authState = AuthState.Unauthenticated,
-//            isBiometricAvailable = true,
-//            isPinSetup = true,
-//            onBiometricAuthClick = {},
-//            onPinAuthClick = {},
-//            onSetupPinClick = {},
-//            onBiometricAuthResult = {}
-//        )
+        AuthScreen(
+            authState = AuthState.Unauthenticated,
+            isBiometricAvailable = true,
+            isPinSetup = true,
+            onBiometricAuthClick = {},
+            onPinAuthClick = {},
+            onSetupPinClick = {}
+        )
     }
 }
 
@@ -416,17 +399,14 @@ fun AuthScreenPreview() {
 @Composable
 fun AuthScreenPinSetupPreview() {
     CryptTheme {
-        // This preview will not work as intended due to the AuthUseCase dependency
-//        AuthScreen(
-//            authUseCase = TODO(),
-//            authState = AuthState.Unauthenticated,
-//            isBiometricAvailable = true,
-//            isPinSetup = false,
-//            onBiometricAuthClick = {},
-//            onPinAuthClick = {},
-//            onSetupPinClick = {},
-//            onBiometricAuthResult = {}
-//        )
+        AuthScreen(
+            authState = AuthState.Unauthenticated,
+            isBiometricAvailable = true,
+            isPinSetup = false,
+            onBiometricAuthClick = {},
+            onPinAuthClick = {},
+            onSetupPinClick = {}
+        )
     }
 }
 
@@ -434,16 +414,13 @@ fun AuthScreenPinSetupPreview() {
 @Composable
 fun AuthScreenErrorPreview() {
     CryptTheme {
-        // This preview will not work as intended due to the AuthUseCase dependency
-//        AuthScreen(
-//            authUseCase = TODO(),
-//            authState = AuthState.AuthError("Incorrect PIN. Please try again."),
-//            isBiometricAvailable = false,
-//            isPinSetup = true,
-//            onBiometricAuthClick = {},
-//            onPinAuthClick = {},
-//            onSetupPinClick = {},
-//            onBiometricAuthResult = {}
-//        )
+        AuthScreen(
+            authState = AuthState.AuthError("Incorrect PIN. Please try again."),
+            isBiometricAvailable = false,
+            isPinSetup = true,
+            onBiometricAuthClick = {},
+            onPinAuthClick = {},
+            onSetupPinClick = {}
+        )
     }
 }

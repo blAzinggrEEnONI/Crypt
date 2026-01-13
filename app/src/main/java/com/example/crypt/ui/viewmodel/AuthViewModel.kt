@@ -9,8 +9,10 @@ import com.example.crypt.domain.service.ErrorHandler
 import com.example.crypt.domain.usecase.AuthUseCase
 import com.example.crypt.domain.usecase.AutoLockUseCase
 import dagger.hilt.android.lifecycle.HiltViewModel
+import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.*
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.withContext
 import javax.inject.Inject
 
 /**
@@ -42,21 +44,24 @@ class AuthViewModel @Inject constructor(
     val isPinSetup: StateFlow<Boolean> = _isPinSetup.asStateFlow()
 
     init {
-        // Initialize biometric availability and PIN setup status
-        _biometricAvailable.value = authUseCase.isBiometricAvailable()
-        _isPinSetup.value = authUseCase.isPinSetup()
+        // IMPORTANT: Move heavy initialization to background thread to prevent Main Thread blocking
+        // and allow the keyboard (IME) to function correctly.
+        viewModelScope.launch {
+            val bioAvailable = withContext(Dispatchers.IO) { authUseCase.isBiometricAvailable() }
+            val pinSetup = withContext(Dispatchers.IO) { authUseCase.isPinSetup() }
+            
+            _biometricAvailable.value = bioAvailable
+            _isPinSetup.value = pinSetup
+        }
 
         // Observe authentication state from AuthUseCase
         viewModelScope.launch {
             authUseCase.isAuthenticated.collect { isAuthenticated ->
                 if (isAuthenticated) {
                     _authState.value = AuthState.Authenticated
-                    // Start auto-lock timer when authenticated
                     autoLockUseCase.onAuthenticationSuccess()
-                    // Navigate to main app
                     _navigationEvent.emit(NavigationEvent.NavigateToMain)
                 } else {
-                    // Only set to unauthenticated if we'''re not in an error state
                     if (_authState.value !is AuthState.AuthError) {
                         _authState.value = AuthState.Unauthenticated
                     }
@@ -69,18 +74,11 @@ class AuthViewModel @Inject constructor(
             autoLockUseCase.observeAppState().collect { lockState ->
                 when (lockState) {
                     is AppLockState.Locked -> {
-                        // App was locked, reset auth state
                         if (_authState.value is AuthState.Authenticated) {
                             _authState.value = AuthState.Unauthenticated
                         }
                     }
-                    is AppLockState.AutoLocking -> {
-                        // App is about to lock, could show countdown UI
-                        // For now, we'''ll handle this in the main app screens
-                    }
-                    is AppLockState.Unlocked -> {
-                        // App is unlocked and active
-                    }
+                    else -> {}
                 }
             }
         }
@@ -88,12 +86,9 @@ class AuthViewModel @Inject constructor(
 
     /**
      * Initiates biometric authentication with proper error handling and loading states.
-     * @param activity The FragmentActivity required for BiometricPrompt
      */
     fun authenticateWithBiometrics(activity: FragmentActivity) {
-        if (_loadingState.value.isLoading) {
-            return
-        }
+        if (_loadingState.value.isLoading) return
 
         _authState.value = AuthState.Authenticating
         _loadingState.value = LoadingState.Loading(LoadingMessages.AUTHENTICATING)
@@ -112,15 +107,11 @@ class AuthViewModel @Inject constructor(
     }
 
     /**
-     * Initiates PIN authentication using secure string handling with comprehensive error handling.
-     * @param pin The PIN entered by the user
+     * Initiates PIN authentication using secure string handling.
      */
     fun authenticateWithPin(pin: String) {
-        if (_loadingState.value.isLoading) {
-            return
-        }
+        if (_loadingState.value.isLoading) return
 
-        // Validate PIN format
         if (pin.length != 4 || !pin.all { it.isDigit() }) {
             val error = CryptError.ValidationError("PIN", "must be 4 digits")
             _authState.value = AuthState.AuthError(error.userMessage)
@@ -132,10 +123,11 @@ class AuthViewModel @Inject constructor(
         _loadingState.value = LoadingState.Loading(LoadingMessages.AUTHENTICATING)
 
         viewModelScope.launch {
-            // Use secure string handling for PIN
             secureMemoryManager.createSecureString(pin).use { securePin ->
                 try {
-                    val result = authUseCase.authenticateWithPin(securePin.getValue())
+                    val result = withContext(Dispatchers.IO) {
+                        authUseCase.authenticateWithPin(securePin.getValue())
+                    }
                     handleAuthResult(result)
                 } catch (e: Exception) {
                     val error = CryptError.fromException(e)
@@ -148,15 +140,11 @@ class AuthViewModel @Inject constructor(
     }
 
     /**
-     * Sets up a new PIN for the user using secure string handling with comprehensive error handling.
-     * @param pin The new PIN to set up
+     * Sets up a new PIN for the user.
      */
     fun setupPin(pin: String) {
-        if (_loadingState.value.isLoading) {
-            return
-        }
+        if (_loadingState.value.isLoading) return
 
-        // Validate PIN format
         if (pin.length != 4 || !pin.all { it.isDigit() }) {
             val error = CryptError.ValidationError("PIN", "must be 4 digits")
             _authState.value = AuthState.AuthError(error.userMessage)
@@ -168,10 +156,11 @@ class AuthViewModel @Inject constructor(
         _loadingState.value = LoadingState.Loading(LoadingMessages.SETTING_UP_PIN)
 
         viewModelScope.launch {
-            // Use secure string handling for PIN setup
             secureMemoryManager.createSecureString(pin).use { securePin ->
                 try {
-                    val success = authUseCase.setupPin(securePin.getValue())
+                    val success = withContext(Dispatchers.IO) {
+                        authUseCase.setupPin(securePin.getValue())
+                    }
                     if (success) {
                         _isPinSetup.value = true
                         _authState.value = AuthState.Unauthenticated
@@ -193,25 +182,15 @@ class AuthViewModel @Inject constructor(
         }
     }
 
-    /**
-     * Checks if authentication is required.
-     * @return true if user needs to authenticate, false if already authenticated
-     */
     fun isAuthenticationRequired(): Boolean {
         return authUseCase.isAuthenticationRequired()
     }
 
-    /**
-     * Logs out the user and locks the app.
-     */
     fun logout() {
         autoLockUseCase.lockApp()
         _authState.value = AuthState.Unauthenticated
     }
 
-    /**
-     * Clears any error state and resets to unauthenticated.
-     */
     fun clearError() {
         if (_authState.value is AuthState.AuthError) {
             _authState.value = AuthState.Unauthenticated
@@ -221,83 +200,45 @@ class AuthViewModel @Inject constructor(
         }
     }
 
-    /**
-     * Gets the current error for display purposes.
-     */
-    fun getCurrentError(): CryptError? {
-        return _loadingState.value.errorOrNull
-    }
-
-    /**
-     * Gets user-friendly error message with suggestions.
-     */
-    fun getErrorMessageWithSuggestion(): String? {
-        return getCurrentError()?.let { error ->
-            errorHandler.getUserFriendlyMessage(error)
+    fun refreshBiometricAvailability() {
+        viewModelScope.launch {
+            _biometricAvailable.value = withContext(Dispatchers.IO) { authUseCase.isBiometricAvailable() }
         }
     }
 
-    /**
-     * Refreshes the biometric availability status.
-     * Should be called when returning from settings or when biometric setup changes.
-     */
-    fun refreshBiometricAvailability() {
-        _biometricAvailable.value = authUseCase.isBiometricAvailable()
-    }
-
-    /**
-     * Handles the result of authentication attempts with proper error handling.
-     */
     private suspend fun handleAuthResult(result: AuthResult) {
         when (result) {
             is AuthResult.Success -> {
                 _loadingState.value = LoadingState.Success("Authentication successful")
-                // Success is handled by the AuthUseCase isAuthenticated flow
-                // The state will be updated automatically
             }
             is AuthResult.Error -> {
                 val error = CryptError.PinAuthenticationFailed()
-                errorHandler.handleError(error, "Authentication result")
                 _authState.value = AuthState.AuthError(error.userMessage)
                 _loadingState.value = LoadingState.Error(error)
             }
             is AuthResult.BiometricUnavailable -> {
-                val error = CryptError.BiometricNotAvailable("Hardware not available")
-                errorHandler.handleError(error, "Biometric check")
-                _authState.value = AuthState.AuthError(error.userMessage)
-                _loadingState.value = LoadingState.Error(error)
                 _biometricAvailable.value = false
-            }
-            is AuthResult.UserCancelled -> {
-                _authState.value = AuthState.Unauthenticated
+                _authState.value = AuthState.AuthError("Biometrics unavailable")
                 _loadingState.value = LoadingState.Idle
             }
-            is AuthResult.AuthenticationRequired -> {
+            else -> {
                 _authState.value = AuthState.Unauthenticated
                 _loadingState.value = LoadingState.Idle
             }
         }
     }
 
-    /**
-     * Called when user interacts with the app to reset auto-lock timer.
-     */
     fun onUserInteraction() {
         autoLockUseCase.resetInactivityTimer()
     }
 
-    /**
-     * Gets the current app lock state.
-     */
     fun getAppLockState(): StateFlow<AppLockState> {
         return autoLockUseCase.observeAppState()
     }
 
     override fun onCleared() {
         super.onCleared()
-        // Request garbage collection to help clear sensitive data
         secureMemoryManager.requestGarbageCollection()
-        // Cleanup is handled by AutoLockUseCase lifecycle
     }
 }
 

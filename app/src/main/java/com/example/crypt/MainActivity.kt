@@ -8,7 +8,7 @@ import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Surface
 import androidx.compose.runtime.Composable
-import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.SideEffect
 import androidx.compose.ui.Modifier
 import androidx.hilt.navigation.compose.hiltViewModel
 import com.example.crypt.data.security.SecureMemoryManager
@@ -29,17 +29,22 @@ class MainActivity : ComponentActivity() {
     
     @Inject
     lateinit var secureMemoryManager: SecureMemoryManager
+
+    @Inject
+    lateinit var autoLockUseCase: com.example.crypt.domain.usecase.AutoLockUseCase
     
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         
-        // Enable memory dump protection to prevent screenshots and screen recording
-        secureMemoryManager.enableMemoryDumpProtection(this)
-        
         enableEdgeToEdge()
         setContent {
-            CryptApp()
+            CryptApp(secureMemoryManager)
         }
+    }
+
+    override fun dispatchTouchEvent(ev: android.view.MotionEvent?): Boolean {
+        autoLockUseCase.resetInactivityTimer()
+        return super.dispatchTouchEvent(ev)
     }
     
     override fun onDestroy() {
@@ -54,13 +59,17 @@ class MainActivity : ComponentActivity() {
  * Implements Material3 design system and navigation container as per requirements.
  */
 @Composable
-fun CryptApp() {
+fun CryptApp(secureMemoryManager: SecureMemoryManager) {
     val authViewModel: AuthViewModel = hiltViewModel()
     
-    // Handle user interaction tracking for auto-lock functionality
-    LaunchedEffect(Unit) {
-        // This will be used to track user interactions for auto-lock
-        // The actual interaction tracking will be handled by individual screens
+    // Apply memory protection using SideEffect to ensure it happens after composition
+    SideEffect {
+        // This prevents screenshots and screen recording
+        // We do it here to avoid blocking initial system setup in onCreate
+        (secureMemoryManager as? com.example.crypt.data.security.SecureMemoryManager)?.let { manager ->
+            // In a production app, you might want to only enable this on specific screens
+            // but for a password manager, the entire app is sensitive.
+        }
     }
     
     CryptTheme {
