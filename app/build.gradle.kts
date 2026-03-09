@@ -22,11 +22,15 @@ android {
 
     buildTypes {
         release {
-            isMinifyEnabled = false
+            isMinifyEnabled = true
+            isShrinkResources = true
             proguardFiles(
                 getDefaultProguardFile("proguard-android-optimize.txt"),
                 "proguard-rules.pro"
             )
+        }
+        debug {
+            isDebuggable = true
         }
     }
     compileOptions {
@@ -44,7 +48,7 @@ android {
 dependencies {
     implementation(libs.androidx.core.ktx)
     implementation(libs.androidx.lifecycle.runtime.ktx)
-    implementation("androidx.lifecycle:lifecycle-process:2.6.1")
+    implementation(libs.lifecycle.process)
     implementation(libs.androidx.activity.compose)
     implementation(platform(libs.androidx.compose.bom))
     implementation(libs.androidx.compose.ui)
@@ -70,28 +74,28 @@ dependencies {
     implementation(libs.biometric)
     
     // Security
-    implementation("androidx.security:security-crypto:1.1.0-alpha06")
+    implementation(libs.security.crypto)
     
     // Navigation
     implementation(libs.navigation.compose)
     
     testImplementation(libs.junit)
-    testImplementation("org.mockito:mockito-core:5.7.0")
-    testImplementation("org.mockito.kotlin:mockito-kotlin:5.2.1")
-    testImplementation("org.jetbrains.kotlinx:kotlinx-coroutines-test:1.7.3")
-    testImplementation("androidx.arch.core:core-testing:2.2.0")
+    testImplementation(libs.mockito.core)
+    testImplementation(libs.mockito.kotlin)
+    testImplementation(libs.kotlinx.coroutines.test)
+    testImplementation(libs.arch.core.test)
     
     androidTestImplementation(libs.androidx.junit)
     androidTestImplementation(libs.androidx.espresso.core)
     androidTestImplementation(platform(libs.androidx.compose.bom))
     androidTestImplementation(libs.androidx.compose.ui.test.junit4)
-    androidTestImplementation("org.jetbrains.kotlinx:kotlinx-coroutines-test:1.7.3")
-    androidTestImplementation("androidx.arch.core:core-testing:2.2.0")
-    androidTestImplementation("androidx.test.ext:junit:1.1.5")
-    androidTestImplementation("androidx.test:runner:1.5.2")
-    androidTestImplementation("androidx.test:rules:1.5.0")
-    androidTestImplementation("com.google.dagger:hilt-android-testing:2.48")
-    kaptAndroidTest("com.google.dagger:hilt-android-compiler:2.48")
+    androidTestImplementation(libs.kotlinx.coroutines.test)
+    androidTestImplementation(libs.arch.core.test)
+    androidTestImplementation(libs.androidx.junit)
+    androidTestImplementation(libs.android.test.runner)
+    androidTestImplementation(libs.android.test.rules)
+    androidTestImplementation(libs.hilt.android)
+    kaptAndroidTest(libs.hilt.compiler)
     
     debugImplementation(libs.androidx.compose.ui.tooling)
     debugImplementation(libs.androidx.compose.ui.test.manifest)

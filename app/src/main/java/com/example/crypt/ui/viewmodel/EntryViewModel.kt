@@ -5,20 +5,29 @@ import androidx.lifecycle.viewModelScope
 import com.example.crypt.data.database.PasswordEntry
 import com.example.crypt.data.repository.PasswordRepository
 import com.example.crypt.domain.model.AuthResult
+import com.example.crypt.domain.model.CryptError
+import com.example.crypt.domain.service.CryptLogger
+import com.example.crypt.domain.service.ErrorHandler
+import com.example.crypt.domain.service.InputValidator
+import com.example.crypt.domain.service.SecureClipboardManager
 import com.example.crypt.domain.usecase.AuthUseCase
 import dagger.hilt.android.lifecycle.HiltViewModel
 import kotlinx.coroutines.flow.*
 import kotlinx.coroutines.launch
 import javax.inject.Inject
 
-import com.example.crypt.domain.service.SecureClipboardManager
-
 @HiltViewModel
 class EntryViewModel @Inject constructor(
     private val passwordRepository: PasswordRepository,
     private val authUseCase: AuthUseCase,
-    private val secureClipboardManager: SecureClipboardManager
+    private val secureClipboardManager: SecureClipboardManager,
+    private val errorHandler: ErrorHandler,
+    private val inputValidator: InputValidator
 ) : ViewModel() {
+    
+    companion object {
+        private const val TAG = "EntryViewModel"
+    }
     
     // Private mutable state
     private val _uiState = MutableStateFlow(EntryUiState())

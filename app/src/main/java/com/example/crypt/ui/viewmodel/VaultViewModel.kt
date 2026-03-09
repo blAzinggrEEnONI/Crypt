@@ -7,6 +7,7 @@ import com.example.crypt.data.repository.PasswordRepository
 import com.example.crypt.domain.model.CryptError
 import com.example.crypt.domain.model.LoadingState
 import com.example.crypt.domain.model.LoadingMessages
+import com.example.crypt.domain.service.CryptLogger
 import com.example.crypt.domain.service.ErrorHandler
 import dagger.hilt.android.lifecycle.HiltViewModel
 import kotlinx.coroutines.flow.*
@@ -15,13 +16,17 @@ import javax.inject.Inject
 
 /**
  * ViewModel for the password vault screen.
- * Manages password entry list state, search functionality, and user interactions.
+ * Manages password entry list state, search functionality, and error handling.
  */
 @HiltViewModel
 class VaultViewModel @Inject constructor(
     private val passwordRepository: PasswordRepository,
     private val errorHandler: ErrorHandler
 ) : ViewModel() {
+    
+    companion object {
+        private const val TAG = "VaultViewModel"
+    }
     
     // Private mutable state
     private val _searchQuery = MutableStateFlow("")

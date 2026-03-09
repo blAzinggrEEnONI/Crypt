@@ -4,6 +4,10 @@ import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.example.crypt.data.repository.PasswordRepository
 import com.example.crypt.domain.model.PasswordGenerationConfig
+import com.example.crypt.domain.service.CryptLogger
+import com.example.crypt.domain.service.ErrorHandler
+import com.example.crypt.domain.service.InputValidator
+import com.example.crypt.domain.service.SecureClipboardManager
 import com.example.crypt.domain.usecase.GeneratePasswordUseCase
 import dagger.hilt.android.lifecycle.HiltViewModel
 import kotlinx.coroutines.flow.MutableStateFlow
@@ -14,17 +18,21 @@ import javax.inject.Inject
 
 /**
  * ViewModel for the password generation screen.
- * Manages generation configuration state, handles password generation,
- * clipboard operations, and integration with PasswordRepository for saving passwords.
+ * Manages password generation configuration, clipboard operations,
+ * and saving generated passwords to the vault with validation.
  */
-import com.example.crypt.domain.service.SecureClipboardManager
-
 @HiltViewModel
 class GenerateViewModel @Inject constructor(
     private val generatePasswordUseCase: GeneratePasswordUseCase,
     private val passwordRepository: PasswordRepository,
-    private val secureClipboardManager: SecureClipboardManager
+    private val secureClipboardManager: SecureClipboardManager,
+    private val errorHandler: ErrorHandler,
+    private val inputValidator: InputValidator
 ) : ViewModel() {
+    
+    companion object {
+        private const val TAG = "GenerateViewModel"
+    }
     
     private val _uiState = MutableStateFlow(GenerateUiState())
     val uiState: StateFlow<GenerateUiState> = _uiState.asStateFlow()
@@ -165,10 +173,12 @@ class GenerateViewModel @Inject constructor(
     }
     
     /**
-     * Saves the currently generated password to the vault.
+     * Saves the currently generated password to the vault with validation.
      */
     fun savePassword(site: String, username: String, notes: String) {
-        if (_uiState.value.generatedPassword.isEmpty()) {
+        val password = _uiState.value.generatedPassword
+        
+        if (password.isEmpty()) {
             _uiState.value = _uiState.value.copy(
                 message = "No password to save. Generate a password first.",
                 isError = true
@@ -176,9 +186,13 @@ class GenerateViewModel @Inject constructor(
             return
         }
         
-        if (site.isBlank() || username.isBlank()) {
+        // Validate input before attempting to save
+        val validation = inputValidator.validatePasswordEntry(site, username, password, notes)
+        if (!validation.isValid) {
+            val errorMsg = (validation as com.example.crypt.domain.service.ValidationResult.Invalid).error
+            CryptLogger.w(TAG, "Validation failed: $errorMsg")
             _uiState.value = _uiState.value.copy(
-                message = "Site and username are required.",
+                message = errorMsg,
                 isError = true
             )
             return
@@ -186,6 +200,7 @@ class GenerateViewModel @Inject constructor(
         
         viewModelScope.launch {
             try {
+                CryptLogger.d(TAG, "Saving generated password for site: ${site.trim()}")
                 _uiState.value = _uiState.value.copy(
                     isSaving = true,
                     message = null,
@@ -195,10 +210,11 @@ class GenerateViewModel @Inject constructor(
                 val entryId = passwordRepository.saveEntry(
                     site = site.trim(),
                     username = username.trim(),
-                    password = _uiState.value.generatedPassword,
+                    password = password,
                     notes = notes.trim().takeIf { it.isNotEmpty() }
                 )
                 
+                CryptLogger.logDbOperation(TAG, "INSERT generated password", 1)
                 _uiState.value = _uiState.value.copy(
                     isSaving = false,
                     message = "Password saved to vault successfully!",

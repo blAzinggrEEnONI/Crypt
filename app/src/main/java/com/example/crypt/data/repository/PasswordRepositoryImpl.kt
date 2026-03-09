@@ -4,18 +4,22 @@ import android.util.Log
 import com.example.crypt.data.database.CryptDatabase
 import com.example.crypt.data.database.PasswordEntry
 import com.example.crypt.data.security.EncryptionService
+import com.example.crypt.domain.service.CryptLogger
+import com.example.crypt.domain.service.InputValidator
 import kotlinx.coroutines.flow.Flow
 import javax.inject.Inject
 import javax.inject.Singleton
 
 /**
- * Implementation of PasswordRepository that handles encryption/decryption
- * and data transformation between domain and storage layers.
+ * Implementation of PasswordRepository that handles encryption/decryption,
+ * input validation, and data transformation between domain and storage layers.
+ * All password data is encrypted before storage and validated before processing.
  */
 @Singleton
 class PasswordRepositoryImpl @Inject constructor(
     private val database: CryptDatabase,
-    private val encryptionService: EncryptionService
+    private val encryptionService: EncryptionService,
+    private val inputValidator: InputValidator
 ) : PasswordRepository {
     
     companion object {
@@ -43,12 +47,24 @@ class PasswordRepositoryImpl @Inject constructor(
         notes: String?
     ): Long {
         return try {
-            Log.d(TAG, "Attempting to save entry for site: $site")
+            // Validate inputs before processing
+            val validationResult = inputValidator.validatePasswordEntry(site, username, password, notes ?: "")
+            if (!validationResult.isValid) {
+                val errorMsg = (validationResult as? com.example.crypt.domain.service.ValidationResult.Invalid)?.error 
+                    ?: "Invalid input"
+                CryptLogger.w(TAG, "Input validation failed: $errorMsg")
+                throw IllegalArgumentException(errorMsg)
+            }
+            
+            CryptLogger.d(TAG, "Saving entry for site: ${site.trim()}")
+            
             // Encrypt the password
             val encryptedPassword = encryptionService.encrypt(password)
             
             // Encrypt notes if provided
-            val encryptedNotes = notes?.let { encryptionService.encrypt(it) }
+            val encryptedNotes = notes?.takeIf { it.isNotEmpty() }?.let { 
+                encryptionService.encrypt(it) 
+            }
             
             // Create the entry
             val entry = PasswordEntry(
@@ -60,12 +76,22 @@ class PasswordRepositoryImpl @Inject constructor(
                 updatedAt = System.currentTimeMillis()
             )
             
+            // Validate encrypted data format before storing
+            if (!isValidEntry(entry)) {
+                CryptLogger.e(TAG, "Encrypted data validation failed")
+                throw SecurityException("Encrypted data format is invalid")
+            }
+            
             // Insert and return the ID
             val id = passwordDao.insertEntry(entry)
-            Log.d(TAG, "Entry saved successfully with ID: $id")
+            CryptLogger.d(TAG, "Entry saved successfully with ID: $id")
+            CryptLogger.logDbOperation(TAG, "INSERT password entry", 1)
             id
+        } catch (e: IllegalArgumentException) {
+            CryptLogger.w(TAG, "Validation error during save: ${e.message}")
+            throw e
         } catch (e: Exception) {
-            Log.e(TAG, "Failed to save entry: ${e.message}", e)
+            CryptLogger.e(TAG, "Failed to save entry: ${e.message}", e)
             throw SecurityException("Failed to save password entry: ${e.message}", e)
         }
     }
