@@ -51,7 +51,6 @@ abstract class CryptDatabase : RoomDatabase() {
             )
                 .openHelperFactory(supportFactory)
                 .addMigrations(*getAllMigrations())
-                .fallbackToDestructiveMigration() // Only for development - remove in production
                 .build()
         }
         

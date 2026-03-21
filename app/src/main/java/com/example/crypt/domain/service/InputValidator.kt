@@ -163,9 +163,7 @@ class InputValidator @Inject constructor() {
 sealed class ValidationResult {
     object Valid : ValidationResult()
     
-    data class Invalid(val error: String) : ValidationResult() {
-        val isValid: Boolean get() = false
-    }
+    data class Invalid(val error: String) : ValidationResult()
     
     val isValid: Boolean get() = this is Valid
 }

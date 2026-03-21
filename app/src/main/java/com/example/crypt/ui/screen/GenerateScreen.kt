@@ -1,8 +1,5 @@
 package com.example.crypt.ui.screen
 
-import android.content.ClipData
-import android.content.ClipboardManager
-import android.content.Context
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.text.selection.SelectionContainer
@@ -13,7 +10,6 @@ import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
@@ -32,7 +28,6 @@ fun GenerateScreen(
     onNavigateToVault: () -> Unit = {}
 ) {
     val uiState by viewModel.uiState.collectAsState()
-    val context = LocalContext.current
     
     var showSaveDialog by remember { mutableStateOf(false) }
     var siteInput by remember { mutableStateOf("") }
@@ -175,7 +170,7 @@ fun GenerateScreen(
                     }
                 }
                 
-                Divider()
+                HorizontalDivider()
                 
                 // Character Set Options
                 Text(
@@ -263,7 +258,7 @@ fun GenerateScreen(
                     )
                 }
                 
-                Divider()
+                HorizontalDivider()
                 
                 // Exclude Ambiguous Characters Toggle
                 Row(

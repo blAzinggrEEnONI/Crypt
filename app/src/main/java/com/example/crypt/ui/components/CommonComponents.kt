@@ -30,8 +30,7 @@ fun LoadingState(
         ) {
             CircularProgressIndicator(
                 modifier = Modifier.size(48.dp),
-                color = MaterialTheme.colorScheme.primary,
-                contentDescription = "Loading"
+                color = MaterialTheme.colorScheme.primary
             )
             Text(
                 text = message,
@@ -291,8 +290,7 @@ fun LoadingButton(
                     .size(20.dp)
                     .padding(end = 8.dp),
                 color = MaterialTheme.colorScheme.onPrimary,
-                strokeWidth = 2.dp,
-                contentDescription = "Loading"
+                strokeWidth = 2.dp
             )
         }
         Text(label)

@@ -36,7 +36,7 @@ fun CryptNavigation(
     authViewModel: AuthViewModel = hiltViewModel()
 ) {
     val authState by authViewModel.authState.collectAsState()
-    
+
     // Handle navigation events from AuthViewModel
     LaunchedEffect(authViewModel) {
         authViewModel.navigationEvent.collect { event ->
@@ -53,18 +53,31 @@ fun CryptNavigation(
         }
     }
 
+    // Navigate back to auth screen when the app is auto-locked or the user logs out
+    LaunchedEffect(authState) {
+        if (authState is AuthState.Unauthenticated || authState is AuthState.AuthError) {
+            val currentRoute = navController.currentBackStackEntry?.destination?.route
+            // Only navigate to auth if we are currently on a main-app screen
+            if (currentRoute != null && currentRoute != AuthNavigation.AUTH) {
+                navController.navigate(AuthNavigation.AUTH) {
+                    popUpTo(0) { inclusive = true }
+                }
+            }
+        }
+    }
+
     val navBackStackEntry by navController.currentBackStackEntryAsState()
     val currentDestination = navBackStackEntry?.destination
-    
+
     Scaffold(
         modifier = Modifier.fillMaxSize(),
         contentWindowInsets = WindowInsets.safeDrawing,
         bottomBar = {
             // Only show bottom navigation for main screens (Generate and Vault)
             // and only when authenticated
-            val showBottomBar = authState is AuthState.Authenticated && 
+            val showBottomBar = authState is AuthState.Authenticated &&
                 currentDestination?.route in listOf(MainNavigation.GENERATE, MainNavigation.VAULT)
-            
+
             if (showBottomBar) {
                 NavigationBar {
                     bottomNavItems.forEach { item ->
@@ -87,9 +100,12 @@ fun CryptNavigation(
             }
         }
     ) { innerPadding ->
+        // Use a fixed start destination (AUTH) and rely on LaunchedEffect-driven navigation
+        // to move to the main flow once authenticated. Changing startDestination dynamically
+        // on an already-composed NavHost has no effect and causes subtle bugs.
         NavHost(
             navController = navController,
-            startDestination = if (authState is AuthState.Authenticated) MainNavigation.VAULT else AuthNavigation.AUTH,
+            startDestination = AuthNavigation.AUTH,
             modifier = Modifier.padding(innerPadding)
         ) {
             // Auth Flow
@@ -105,7 +121,7 @@ fun CryptNavigation(
                     }
                 )
             }
-            
+
             composable(MainNavigation.VAULT) {
                 VaultScreen(
                     onNavigateToEntry = { entryId ->
@@ -116,7 +132,7 @@ fun CryptNavigation(
                     }
                 )
             }
-            
+
             composable("${MainNavigation.VIEW_ENTRY}/{entryId}") { backStackEntry ->
                 val entryId = backStackEntry.arguments?.getString("entryId")?.toLongOrNull() ?: 0L
                 ViewEntryScreen(
@@ -132,19 +148,22 @@ fun CryptNavigation(
                     }
                 )
             }
-            
+
             composable(MainNavigation.EDIT_ENTRY) {
                 EditEntryScreen(
                     entryId = null,
                     onNavigateBack = {
                         navController.popBackStack()
                     },
-                    onSaveSuccess = {
+                    onNavigateToGenerate = {
+                        navController.navigate(MainNavigation.GENERATE)
+                    },
+                    onSaveSuccess = { _ ->
                         navController.popBackStack()
                     }
                 )
             }
-            
+
             composable("${MainNavigation.EDIT_ENTRY}/{entryId}") { backStackEntry ->
                 val entryId = backStackEntry.arguments?.getString("entryId")?.toLongOrNull()
                 EditEntryScreen(
@@ -152,7 +171,10 @@ fun CryptNavigation(
                     onNavigateBack = {
                         navController.popBackStack()
                     },
-                    onSaveSuccess = {
+                    onNavigateToGenerate = {
+                        navController.navigate(MainNavigation.GENERATE)
+                    },
+                    onSaveSuccess = { _ ->
                         navController.popBackStack()
                     }
                 )
@@ -214,7 +236,7 @@ private fun AuthScreenContainer(
     val authState by authViewModel.authState.collectAsState()
     val biometricAvailable by authViewModel.biometricAvailable.collectAsState()
     val isPinSetup by authViewModel.isPinSetup.collectAsState()
-    
+
     AuthScreen(
         authState = authState,
         isBiometricAvailable = biometricAvailable,

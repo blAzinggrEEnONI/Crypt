@@ -232,9 +232,7 @@ class AuthViewModel @Inject constructor(
         autoLockUseCase.resetInactivityTimer()
     }
 
-    fun getAppLockState(): StateFlow<AppLockState> {
-        return autoLockUseCase.observeAppState()
-    }
+    fun getAppLockState(): StateFlow<AppLockState> = autoLockUseCase.observeAppState()
 
     override fun onCleared() {
         super.onCleared()
